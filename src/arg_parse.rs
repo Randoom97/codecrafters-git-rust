@@ -12,6 +12,7 @@ pub struct Args {
 pub enum Command {
     Init,
     CatFile(CatFileArgs),
+    HashObject(HashObjectArgs),
 }
 
 impl Display for Command {
@@ -24,4 +25,11 @@ impl Display for Command {
 pub struct CatFileArgs {
     #[arg(short = 'p')]
     pub blob_name: String,
+}
+
+#[derive(Parser, Debug)]
+pub struct HashObjectArgs {
+    #[arg(short = 'w')]
+    pub write: bool,
+    pub file_path: String,
 }

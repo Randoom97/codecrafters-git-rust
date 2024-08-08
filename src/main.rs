@@ -25,5 +25,13 @@ fn main() {
                 eprintln!("{}", result.unwrap_err());
             }
         }
+        Command::HashObject(hash_object_args) => {
+            let result = commands::hash_object(&hash_object_args.file_path, hash_object_args.write);
+            if result.is_ok() {
+                println!("{}", result.unwrap());
+            } else {
+                eprintln!("{}", result.unwrap_err());
+            }
+        }
     }
 }

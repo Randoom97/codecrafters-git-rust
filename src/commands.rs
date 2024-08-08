@@ -1,5 +1,8 @@
 use core::str;
-use std::fs;
+use std::{
+    fs::{self, File},
+    io::Read,
+};
 
 use crate::{
     git_object::{self, ObjectType},
@@ -30,4 +33,23 @@ pub fn cat_file(blob_name: &String) -> Result<String, String> {
         }
         ObjectType::Tree => return Err("cat-file not implemented for trees".to_string()),
     }
+}
+
+pub fn hash_object(file_path: &String, write: bool) -> Result<String, String> {
+    let mut file = File::open(&file_path).map_err(|err| format!("error opening file: {err}"))?;
+    let mut file_contents: Vec<u8> = Vec::new();
+    let size = file
+        .read_to_end(&mut file_contents)
+        .map_err(|err| format!("error reading file contents: {err}"))?;
+    let mut blob_contents: Vec<u8> = format!("blob {size}\0").bytes().into_iter().collect();
+    blob_contents.append(&mut file_contents);
+
+    let hash = if write {
+        git_object::write_object(&blob_contents)?
+    } else {
+        git_object::hash_data(&blob_contents)
+    };
+
+    let hash_string = hex::encode(&hash);
+    return Ok(hash_string);
 }

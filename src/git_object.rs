@@ -1,7 +1,8 @@
-use flate2::bufread::ZlibDecoder;
+use flate2::{bufread::ZlibDecoder, write::ZlibEncoder, Compression};
+use sha1::{Digest, Sha1};
 use std::{
     fs::{self, File},
-    io::{BufReader, Read},
+    io::{BufReader, Read, Write},
     path::PathBuf,
 };
 
@@ -9,6 +10,25 @@ pub enum ObjectType {
     Blob,
     Tree,
     Commit,
+}
+
+pub fn write_object(data: &Vec<u8>) -> Result<Vec<u8>, String> {
+    let hash = hash_data(data);
+    let hash_string = hex::encode(&hash);
+    let directory = &hash_string[..2];
+    let file_name = &hash_string[2..];
+
+    fs::create_dir_all(format!(".git/objects/{directory}"))
+        .map_err(|err| format!("error creating directory for git object: {err}"))?;
+    let file = File::create(format!(".git/objects/{directory}/{file_name}"))
+        .map_err(|err| format!("error creating file for git object: {err}"))?;
+
+    let mut encoder = ZlibEncoder::new(file, Compression::default());
+    encoder
+        .write_all(data)
+        .map_err(|err| format!("error compressing git object: {err}"))?;
+
+    return Ok(hash);
 }
 
 pub fn reader(blob_name: &String) -> Result<impl Read, String> {
@@ -66,4 +86,10 @@ fn path_for_blob(blob_name: &String) -> Result<PathBuf, String> {
     }
 
     return Ok(paths.pop().unwrap());
+}
+
+pub fn hash_data(data: &Vec<u8>) -> Vec<u8> {
+    let mut hasher = Sha1::new();
+    hasher.update(data);
+    return hasher.finalize().into_iter().collect();
 }
