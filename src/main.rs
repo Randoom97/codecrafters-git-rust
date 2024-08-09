@@ -18,7 +18,7 @@ fn main() {
             }
         }
         Command::CatFile(cat_file_args) => {
-            let result = commands::cat_file(&cat_file_args.blob_name);
+            let result = commands::cat_file(&cat_file_args.object_name);
             if result.is_ok() {
                 print!("{}", result.unwrap());
             } else {
@@ -29,6 +29,14 @@ fn main() {
             let result = commands::hash_object(&hash_object_args.file_path, hash_object_args.write);
             if result.is_ok() {
                 println!("{}", result.unwrap());
+            } else {
+                eprintln!("{}", result.unwrap_err());
+            }
+        }
+        Command::LsTree(ls_tree_args) => {
+            let result = commands::ls_tree(&ls_tree_args.object_name, ls_tree_args.name_only);
+            if result.is_ok() {
+                print!("{}", result.unwrap());
             } else {
                 eprintln!("{}", result.unwrap_err());
             }

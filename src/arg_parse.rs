@@ -13,6 +13,7 @@ pub enum Command {
     Init,
     CatFile(CatFileArgs),
     HashObject(HashObjectArgs),
+    LsTree(LsTreeArgs),
 }
 
 impl Display for Command {
@@ -24,7 +25,7 @@ impl Display for Command {
 #[derive(Parser, Debug)]
 pub struct CatFileArgs {
     #[arg(short = 'p')]
-    pub blob_name: String,
+    pub object_name: String,
 }
 
 #[derive(Parser, Debug)]
@@ -32,4 +33,11 @@ pub struct HashObjectArgs {
     #[arg(short = 'w')]
     pub write: bool,
     pub file_path: String,
+}
+
+#[derive(Parser, Debug)]
+pub struct LsTreeArgs {
+    #[arg(long)]
+    pub name_only: bool,
+    pub object_name: String,
 }

@@ -6,6 +6,9 @@ use std::{
     path::PathBuf,
 };
 
+use crate::reader_utils;
+
+#[derive(PartialEq)]
 pub enum ObjectType {
     Blob,
     Tree,
@@ -31,8 +34,8 @@ pub fn write_object(data: &Vec<u8>) -> Result<Vec<u8>, String> {
     return Ok(hash);
 }
 
-pub fn reader(blob_name: &String) -> Result<impl Read, String> {
-    let path = path_for_blob(blob_name)?;
+pub fn reader(object_name: &String) -> Result<impl Read, String> {
+    let path = path_for_blob(object_name)?;
     let f = File::open(path).map_err(|err| format!("error opening file: {err}"))?;
     let reader = BufReader::new(f);
     let decoder = ZlibDecoder::new(reader);
@@ -92,4 +95,33 @@ pub fn hash_data(data: &Vec<u8>) -> Vec<u8> {
     let mut hasher = Sha1::new();
     hasher.update(data);
     return hasher.finalize().into_iter().collect();
+}
+
+pub struct TreeNode {
+    pub mode: u64,
+    pub name: String,
+    pub hash: String,
+}
+
+pub fn read_tree(reader: &mut impl Read, mut size: usize) -> Result<Vec<TreeNode>, String> {
+    let mut result: Vec<TreeNode> = Vec::new();
+    while size > 0 {
+        let info = reader_utils::read_to_next_null_byte(reader)?;
+        let parts: Vec<&str> = info.split(' ').into_iter().collect();
+        if parts.len() != 2 {
+            return Err("tree info had the incorrect amount of parts".to_string());
+        }
+
+        let mode = str::parse::<u64>(parts[0])
+            .map_err(|err| format!("error parsing tree node mode: {err}"))?;
+
+        result.push(TreeNode {
+            mode,
+            name: parts[1].to_string(),
+            hash: hex::encode(reader_utils::read_n_bytes(20, reader)?),
+        });
+
+        size -= info.len() + 21;
+    }
+    return Ok(result);
 }

@@ -19,8 +19,8 @@ pub fn init() -> Result<(), String> {
     Ok(())
 }
 
-pub fn cat_file(blob_name: &String) -> Result<String, String> {
-    let mut reader = git_object::reader(blob_name)?;
+pub fn cat_file(object_name: &String) -> Result<String, String> {
+    let mut reader = git_object::reader(object_name)?;
     let (object_type, size) =
         git_object::identify_header(&reader_utils::read_to_next_null_byte(&mut reader)?)?;
 
@@ -31,7 +31,7 @@ pub fn cat_file(blob_name: &String) -> Result<String, String> {
                 .map_err(|err| format!("error reading object file: {err}"))?
                 .to_string());
         }
-        ObjectType::Tree => return Err("cat-file not implemented for trees".to_string()),
+        ObjectType::Tree => return stringify_tree(&mut reader, size, false),
     }
 }
 
@@ -52,4 +52,37 @@ pub fn hash_object(file_path: &String, write: bool) -> Result<String, String> {
 
     let hash_string = hex::encode(&hash);
     return Ok(hash_string);
+}
+
+pub fn ls_tree(object_name: &String, name_only: bool) -> Result<String, String> {
+    let mut reader = git_object::reader(object_name)?;
+    let (object_type, size) =
+        git_object::identify_header(&reader_utils::read_to_next_null_byte(&mut reader)?)?;
+    if object_type != ObjectType::Tree {
+        return Err(format!("{object_name} is not a tree object"));
+    }
+
+    return stringify_tree(&mut reader, size, name_only);
+}
+
+fn stringify_tree(reader: &mut impl Read, size: usize, name_only: bool) -> Result<String, String> {
+    let tree_nodes = git_object::read_tree(reader, size)?;
+    let mut result = String::new();
+    for tree_node in tree_nodes {
+        if name_only {
+            result += format!("{}\n", tree_node.name).as_str();
+        } else {
+            let object_type = if tree_node.mode == 40000 {
+                "tree"
+            } else {
+                "blob"
+            };
+            result += format!(
+                "{:0>6} {} {}    {}\n",
+                tree_node.mode, object_type, tree_node.hash, tree_node.name
+            )
+            .as_str();
+        }
+    }
+    return Ok(result);
 }
