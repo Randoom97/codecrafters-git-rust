@@ -14,6 +14,7 @@ pub enum Command {
     CatFile(CatFileArgs),
     HashObject(HashObjectArgs),
     LsTree(LsTreeArgs),
+    WriteTree,
 }
 
 impl Display for Command {

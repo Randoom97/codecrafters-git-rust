@@ -65,6 +65,10 @@ pub fn ls_tree(object_name: &String, name_only: bool) -> Result<String, String> 
     return stringify_tree(&mut reader, size, name_only);
 }
 
+pub fn write_tree() -> Result<String, String> {
+    return Ok(hex::encode(git_object::write_tree_from_directory("./")?));
+}
+
 fn stringify_tree(reader: &mut impl Read, size: usize, name_only: bool) -> Result<String, String> {
     let tree_nodes = git_object::read_tree(reader, size)?;
     let mut result = String::new();

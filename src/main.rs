@@ -41,5 +41,13 @@ fn main() {
                 eprintln!("{}", result.unwrap_err());
             }
         }
+        Command::WriteTree => {
+            let result = commands::write_tree();
+            if result.is_ok() {
+                println!("{}", result.unwrap());
+            } else {
+                eprintln!("{}", result.unwrap_err());
+            }
+        }
     }
 }

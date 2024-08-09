@@ -3,7 +3,7 @@ use sha1::{Digest, Sha1};
 use std::{
     fs::{self, File},
     io::{BufReader, Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use crate::reader_utils;
@@ -32,6 +32,70 @@ pub fn write_object(data: &Vec<u8>) -> Result<Vec<u8>, String> {
         .map_err(|err| format!("error compressing git object: {err}"))?;
 
     return Ok(hash);
+}
+
+pub fn write_blob_from_file<P: AsRef<Path>>(file_path: P) -> Result<Vec<u8>, String> {
+    let mut file_bytes = fs::read(file_path).map_err(|err| format!("error reading file {err}"))?;
+    return write_blob(&mut file_bytes);
+}
+
+pub fn write_blob(data: &mut Vec<u8>) -> Result<Vec<u8>, String> {
+    let mut blob_bytes: Vec<u8> = format!("blob {}\0", data.len())
+        .bytes()
+        .into_iter()
+        .collect();
+    blob_bytes.append(data);
+    return write_object(&blob_bytes);
+}
+
+pub fn write_tree_from_directory<P: AsRef<Path>>(directory_path: P) -> Result<Vec<u8>, String> {
+    let mut paths: Vec<PathBuf> = fs::read_dir(directory_path)
+        .map_err(|err| format!("error reading directory: {err}"))?
+        .into_iter()
+        .filter(|r| r.is_ok())
+        .map(|r| r.unwrap().path())
+        .collect();
+    paths.sort();
+
+    let mut tree_byte_buffer: Vec<u8> = Vec::new();
+    for path in paths {
+        let name = path
+            .file_name()
+            .map(|os_name| os_name.to_str())
+            .unwrap_or(None);
+        if name.is_none() {
+            return Err("error getting name for dir entry".to_string());
+        }
+
+        if name.unwrap() == ".git" {
+            continue;
+        }
+
+        let (mut entry_hash, mode) = if path.is_dir() {
+            (write_tree_from_directory(&path)?, 40000)
+        } else {
+            (write_blob_from_file(&path)?, 100644)
+        };
+
+        tree_byte_buffer.append(
+            &mut format!("{} {}\0", mode, name.unwrap())
+                .bytes()
+                .into_iter()
+                .collect(),
+        );
+        tree_byte_buffer.append(&mut entry_hash);
+    }
+
+    return write_tree(&mut tree_byte_buffer);
+}
+
+pub fn write_tree(data: &mut Vec<u8>) -> Result<Vec<u8>, String> {
+    let mut tree_bytes: Vec<u8> = format!("tree {}\0", data.len())
+        .bytes()
+        .into_iter()
+        .collect();
+    tree_bytes.append(data);
+    return write_object(&tree_bytes);
 }
 
 pub fn reader(object_name: &String) -> Result<impl Read, String> {
