@@ -15,6 +15,7 @@ pub enum Command {
     HashObject(HashObjectArgs),
     LsTree(LsTreeArgs),
     WriteTree,
+    CommitTree(CommitTreeArgs),
 }
 
 impl Display for Command {
@@ -41,4 +42,13 @@ pub struct LsTreeArgs {
     #[arg(long)]
     pub name_only: bool,
     pub object_name: String,
+}
+
+#[derive(Parser, Debug)]
+pub struct CommitTreeArgs {
+    pub tree_name: String,
+    #[arg(short = 'm')]
+    pub message: String,
+    #[arg(short = 'p')]
+    pub parent_tree: Option<String>,
 }

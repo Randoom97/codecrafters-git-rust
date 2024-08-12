@@ -49,5 +49,17 @@ fn main() {
                 eprintln!("{}", result.unwrap_err());
             }
         }
+        Command::CommitTree(commit_tree_args) => {
+            let result = commands::commit_tree(
+                &commit_tree_args.message,
+                &commit_tree_args.tree_name,
+                &commit_tree_args.parent_tree,
+            );
+            if result.is_ok() {
+                println!("{}", result.unwrap());
+            } else {
+                eprintln!("{}", result.unwrap_err());
+            }
+        }
     }
 }

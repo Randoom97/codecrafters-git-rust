@@ -2,7 +2,10 @@ use core::str;
 use std::{
     fs::{self, File},
     io::Read,
+    time::{SystemTime, UNIX_EPOCH},
 };
+
+use chrono::Local;
 
 use crate::{
     git_object::{self, ObjectType},
@@ -41,7 +44,7 @@ pub fn hash_object(file_path: &String, write: bool) -> Result<String, String> {
     let size = file
         .read_to_end(&mut file_contents)
         .map_err(|err| format!("error reading file contents: {err}"))?;
-    let mut blob_contents: Vec<u8> = format!("blob {size}\0").bytes().into_iter().collect();
+    let mut blob_contents: Vec<u8> = format!("blob {size}\0").bytes().collect();
     blob_contents.append(&mut file_contents);
 
     let hash = if write {
@@ -67,6 +70,50 @@ pub fn ls_tree(object_name: &String, name_only: bool) -> Result<String, String> 
 
 pub fn write_tree() -> Result<String, String> {
     return Ok(hex::encode(git_object::write_tree_from_directory("./")?));
+}
+
+pub fn commit_tree(
+    message: &String,
+    tree_name: &String,
+    parent_name: &Option<String>,
+) -> Result<String, String> {
+    if git_object::get_type(tree_name)? != ObjectType::Tree {
+        return Err("provided hash isn't a tree".to_string());
+    }
+    if parent_name.is_some()
+        && git_object::get_type(parent_name.as_ref().unwrap())? != ObjectType::Commit
+    {
+        return Err("provided parent hash isn't a commit".to_string());
+    }
+
+    let full_tree_name = git_object::full_hash(tree_name)?;
+    let mut commit_byte_buffer: Vec<u8> = Vec::new();
+    commit_byte_buffer.append(&mut format!("tree {full_tree_name}\n").bytes().collect());
+    if parent_name.is_some() {
+        let full_parent_hash = git_object::full_hash(parent_name.as_ref().unwrap())?;
+
+        commit_byte_buffer.append(&mut format!("parent {}\n", full_parent_hash).bytes().collect());
+    }
+    let current_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| format!("error getting timestamp: {err}"))?
+        .as_secs();
+    let timezone = Local::now().offset().to_string();
+    commit_byte_buffer.append(
+        &mut format!("author 123abc <123abc@example.com> {current_time} {timezone}\n")
+            .bytes()
+            .collect(),
+    );
+    commit_byte_buffer.append(
+        &mut format!("committer 123abc <123abc@example.com> {current_time} {timezone}\n\n")
+            .bytes()
+            .collect(),
+    );
+    commit_byte_buffer.append(&mut format!("{message}\n").bytes().collect());
+
+    let hash = git_object::write_commit(&mut commit_byte_buffer)?;
+
+    return Ok(hex::encode(hash));
 }
 
 fn stringify_tree(reader: &mut impl Read, size: usize, name_only: bool) -> Result<String, String> {

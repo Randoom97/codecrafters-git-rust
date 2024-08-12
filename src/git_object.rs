@@ -40,10 +40,7 @@ pub fn write_blob_from_file<P: AsRef<Path>>(file_path: P) -> Result<Vec<u8>, Str
 }
 
 pub fn write_blob(data: &mut Vec<u8>) -> Result<Vec<u8>, String> {
-    let mut blob_bytes: Vec<u8> = format!("blob {}\0", data.len())
-        .bytes()
-        .into_iter()
-        .collect();
+    let mut blob_bytes: Vec<u8> = format!("blob {}\0", data.len()).bytes().collect();
     blob_bytes.append(data);
     return write_object(&blob_bytes);
 }
@@ -77,12 +74,7 @@ pub fn write_tree_from_directory<P: AsRef<Path>>(directory_path: P) -> Result<Ve
             (write_blob_from_file(&path)?, 100644)
         };
 
-        tree_byte_buffer.append(
-            &mut format!("{} {}\0", mode, name.unwrap())
-                .bytes()
-                .into_iter()
-                .collect(),
-        );
+        tree_byte_buffer.append(&mut format!("{} {}\0", mode, name.unwrap()).bytes().collect());
         tree_byte_buffer.append(&mut entry_hash);
     }
 
@@ -90,16 +82,19 @@ pub fn write_tree_from_directory<P: AsRef<Path>>(directory_path: P) -> Result<Ve
 }
 
 pub fn write_tree(data: &mut Vec<u8>) -> Result<Vec<u8>, String> {
-    let mut tree_bytes: Vec<u8> = format!("tree {}\0", data.len())
-        .bytes()
-        .into_iter()
-        .collect();
+    let mut tree_bytes: Vec<u8> = format!("tree {}\0", data.len()).bytes().collect();
     tree_bytes.append(data);
     return write_object(&tree_bytes);
 }
 
+pub fn write_commit(data: &mut Vec<u8>) -> Result<Vec<u8>, String> {
+    let mut commit_bytes: Vec<u8> = format!("commit {}\0", data.len()).bytes().collect();
+    commit_bytes.append(data);
+    return write_object(&commit_bytes);
+}
+
 pub fn reader(object_name: &String) -> Result<impl Read, String> {
-    let path = path_for_blob(object_name)?;
+    let path = path_for_object(object_name)?;
     let f = File::open(path).map_err(|err| format!("error opening file: {err}"))?;
     let reader = BufReader::new(f);
     let decoder = ZlibDecoder::new(reader);
@@ -125,13 +120,13 @@ pub fn identify_header(header: &String) -> Result<(ObjectType, usize), String> {
     return Ok((object_type, size));
 }
 
-fn path_for_blob(blob_name: &String) -> Result<PathBuf, String> {
-    if blob_name.len() < 2 {
+fn path_for_object(object_name: &String) -> Result<PathBuf, String> {
+    if object_name.len() < 2 {
         return Err("provided hash isn't long enough".to_string());
     }
 
-    let directory = blob_name[..2].to_string();
-    let filename = &blob_name[2..];
+    let directory = object_name[..2].to_string();
+    let filename = &object_name[2..];
     let mut paths: Vec<PathBuf> = fs::read_dir(format!(".git/objects/{directory}/"))
         .map_err(|err| format!("error reading objects directory: {err}"))?
         .into_iter()
@@ -144,11 +139,11 @@ fn path_for_blob(blob_name: &String) -> Result<PathBuf, String> {
         .collect();
 
     if paths.len() < 1 {
-        return Err(format!("fatal: Not a valid object name {blob_name}"));
+        return Err(format!("fatal: Not a valid object name {object_name}"));
     }
     if paths.len() > 1 {
         return Err(format!(
-            "fatal: Provided hash isn't unique enough {blob_name}"
+            "fatal: Provided hash isn't unique enough {object_name}"
         ));
     }
 
@@ -188,4 +183,20 @@ pub fn read_tree(reader: &mut impl Read, mut size: usize) -> Result<Vec<TreeNode
         size -= info.len() + 21;
     }
     return Ok(result);
+}
+
+pub fn get_type(hash: &String) -> Result<ObjectType, String> {
+    let mut reader = reader(hash)?;
+    let (object_type, _) = identify_header(&reader_utils::read_to_next_null_byte(&mut reader)?)?;
+    return Ok(object_type);
+}
+
+pub fn full_hash(partial_hash: &String) -> Result<String, String> {
+    let path = path_for_object(partial_hash)?;
+    let path_str = path.to_str();
+    if path_str.is_none() {
+        return Err("error converting path to string".to_string());
+    }
+    let parts: Vec<&str> = path_str.unwrap().split("/").collect();
+    return Ok(parts[parts.len() - 2..].join(""));
 }
