@@ -3,7 +3,9 @@ use clap::Parser;
 
 mod arg_parse;
 mod commands;
+mod git;
 mod git_object;
+mod git_pack;
 mod reader_utils;
 
 fn main() {
@@ -55,6 +57,14 @@ fn main() {
                 &commit_tree_args.tree_name,
                 &commit_tree_args.parent_tree,
             );
+            if result.is_ok() {
+                println!("{}", result.unwrap());
+            } else {
+                eprintln!("{}", result.unwrap_err());
+            }
+        }
+        Command::Clone(clone_args) => {
+            let result = commands::clone(&clone_args.origin, &clone_args.directory);
             if result.is_ok() {
                 println!("{}", result.unwrap());
             } else {

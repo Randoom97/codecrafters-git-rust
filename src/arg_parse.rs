@@ -16,6 +16,7 @@ pub enum Command {
     LsTree(LsTreeArgs),
     WriteTree,
     CommitTree(CommitTreeArgs),
+    Clone(CloneArgs),
 }
 
 impl Display for Command {
@@ -51,4 +52,10 @@ pub struct CommitTreeArgs {
     pub message: String,
     #[arg(short = 'p')]
     pub parent_tree: Option<String>,
+}
+
+#[derive(Parser, Debug)]
+pub struct CloneArgs {
+    pub origin: String,
+    pub directory: String,
 }

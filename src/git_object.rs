@@ -1,6 +1,7 @@
 use flate2::{bufread::ZlibDecoder, write::ZlibEncoder, Compression};
 use sha1::{Digest, Sha1};
 use std::{
+    fmt::Display,
     fs::{self, File},
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
@@ -13,6 +14,20 @@ pub enum ObjectType {
     Blob,
     Tree,
     Commit,
+}
+
+impl Display for ObjectType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ObjectType::Blob => "blob",
+                ObjectType::Tree => "tree",
+                ObjectType::Commit => "commit",
+            }
+        )
+    }
 }
 
 pub fn write_object(data: &Vec<u8>) -> Result<Vec<u8>, String> {

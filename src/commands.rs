@@ -1,15 +1,18 @@
 use core::str;
 use std::{
+    env::set_current_dir,
     fs::{self, File},
     io::Read,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use chrono::Local;
+use reqwest::{blocking::Client, header::CONTENT_TYPE, Method, StatusCode};
 
 use crate::{
+    git,
     git_object::{self, ObjectType},
-    reader_utils,
+    git_pack, reader_utils,
 };
 
 pub fn init() -> Result<(), String> {
@@ -114,6 +117,107 @@ pub fn commit_tree(
     let hash = git_object::write_commit(&mut commit_byte_buffer)?;
 
     return Ok(hex::encode(hash));
+}
+
+pub fn clone(remote: &String, directory: &String) -> Result<String, String> {
+    let mut remote_url = remote.clone();
+    if remote_url.ends_with('/') {
+        remote_url.pop();
+    }
+
+    let client = Client::new();
+    let mut discovery_response = client
+        .request(
+            Method::GET,
+            format!("{remote_url}/info/refs?service=git-upload-pack"),
+        )
+        .send()
+        .map_err(|err| format!("error sending discovery request: {err}"))?;
+    if discovery_response.status() != StatusCode::OK {
+        return Err(format!("discovery status: {}", discovery_response.status()));
+    }
+
+    // junk lines before ref data
+    let mut data = reader_utils::read_git_pack_line(&mut discovery_response)?;
+    if data.is_some() {
+        reader_utils::read_git_pack_line(&mut discovery_response)?;
+    }
+
+    // first ref has trailing capabilities
+    data = reader_utils::read_git_pack_line(&mut discovery_response)?;
+    if data.is_none() {
+        return Err("no data found where refs should have started".to_string());
+    }
+
+    let ref_parts = str::from_utf8(data.as_ref().unwrap())
+        .map_err(|err| format!("error converting pack data to string: {err}"))?
+        .split("\x00")
+        .collect::<Vec<&str>>()[0]
+        .split(" ")
+        .collect::<Vec<&str>>();
+    if ref_parts.get(1) != Some(&"HEAD") {
+        return Err("no HEAD ref advertized".to_string());
+    }
+    let head_hash = ref_parts[0];
+
+    let mut head_ref: Option<String> = None;
+    loop {
+        let data = reader_utils::read_git_pack_line(&mut discovery_response)?;
+        if data.is_none() {
+            break;
+        }
+
+        let ref_parts: Vec<&str> = str::from_utf8(data.as_ref().unwrap())
+            .map_err(|err| format!("error converting pack data to string: {err}"))?
+            .split(" ")
+            .collect();
+        if ref_parts.get(0) != Some(&head_hash) {
+            continue;
+        }
+        head_ref = ref_parts.get(1).copied().map(|r| {
+            let mut s = r.to_string();
+            if s.ends_with("\n") {
+                s.pop();
+            }
+            return s;
+        });
+    }
+    if head_ref.is_none() {
+        return Err("a ref that matches HEAD could not be found".to_string());
+    }
+    let ref_name = head_ref
+        .as_ref()
+        .unwrap()
+        .rsplit_once('/')
+        .map(|(_, right)| right.to_string())
+        .unwrap_or(head_ref.unwrap());
+
+    let pack_body: Vec<u8> = format!("0032want {}\n00000009done\n", head_hash)
+        .bytes()
+        .collect();
+    let mut pack_response = client
+        .request(
+            Method::POST,
+            format!("{remote_url}/git-upload-pack?service=git-upload-pack"),
+        )
+        .header(CONTENT_TYPE, "application/x-git-upload-pack-request")
+        .body(pack_body)
+        .send()
+        .map_err(|err| format!("error sending pack data request: {err}"))?;
+    if pack_response.status() != StatusCode::OK {
+        return Err(format!("pack status: {}", pack_response.status()));
+    }
+
+    fs::create_dir_all(directory).map_err(|err| format!("error creating directory: {err}"))?;
+    set_current_dir(directory).map_err(|err| format!("error changing directory: {err}"))?;
+    init()?;
+
+    reader_utils::read_git_pack_line(&mut pack_response)?; // NAK
+    git_pack::unpack(&mut pack_response)?;
+    git::make_branch(&ref_name, &head_hash.to_string())?;
+    git::checkout(&ref_name)?;
+
+    return Ok(format!("cloned remote {remote_url} to {directory}"));
 }
 
 fn stringify_tree(reader: &mut impl Read, size: usize, name_only: bool) -> Result<String, String> {
